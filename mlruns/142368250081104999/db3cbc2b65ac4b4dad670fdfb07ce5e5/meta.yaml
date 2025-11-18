@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/db3cbc2b65ac4b4dad670fdfb07ce5e5/artifacts
+end_time: 1763411725413
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: db3cbc2b65ac4b4dad670fdfb07ce5e5
+run_name: kindly-steed-750
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763411722734
+status: 3
+tags: []
+user_id: Anes

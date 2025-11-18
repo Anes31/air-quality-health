@@ -1,0 +1,11 @@
+requests
+python-dotenv
+pandas
+pyarrow
+scikit-learn
+joblib
+fastapi
+uvicorn
+mlflow
+lightgbm
+openai

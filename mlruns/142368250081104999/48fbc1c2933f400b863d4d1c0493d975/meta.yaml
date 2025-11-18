@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/48fbc1c2933f400b863d4d1c0493d975/artifacts
+end_time: 1763428113594
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 48fbc1c2933f400b863d4d1c0493d975
+run_name: unique-pig-614
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763428109234
+status: 3
+tags: []
+user_id: Anes

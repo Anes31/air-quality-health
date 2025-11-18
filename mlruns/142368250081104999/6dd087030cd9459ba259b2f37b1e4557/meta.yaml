@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/6dd087030cd9459ba259b2f37b1e4557/artifacts
+end_time: 1763411258394
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 6dd087030cd9459ba259b2f37b1e4557
+run_name: valuable-flea-2
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763411255934
+status: 3
+tags: []
+user_id: Anes

@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/0fce78e6abed482f89eccb9bb307ea6c/artifacts
+end_time: 1763423209527
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 0fce78e6abed482f89eccb9bb307ea6c
+run_name: salty-dove-172
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763423205110
+status: 3
+tags: []
+user_id: Anes

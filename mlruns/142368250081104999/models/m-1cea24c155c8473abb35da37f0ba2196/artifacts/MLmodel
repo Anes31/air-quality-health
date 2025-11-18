@@ -1,0 +1,22 @@
+artifact_path: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/models/m-1cea24c155c8473abb35da37f0ba2196/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.13.7
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.1
+mlflow_version: 3.6.0
+model_id: m-1cea24c155c8473abb35da37f0ba2196
+model_size_bytes: 37659
+model_uuid: m-1cea24c155c8473abb35da37f0ba2196
+prompts: null
+run_id: c9ca959530364fa2b9e5fcc9c27c8830
+utc_time_created: '2025-11-16 18:30:24.604335'

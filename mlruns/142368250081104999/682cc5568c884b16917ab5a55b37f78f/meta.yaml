@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/682cc5568c884b16917ab5a55b37f78f/artifacts
+end_time: 1763426476410
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 682cc5568c884b16917ab5a55b37f78f
+run_name: likeable-crow-221
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763426471322
+status: 3
+tags: []
+user_id: Anes

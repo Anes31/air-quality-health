@@ -1,0 +1,21 @@
+artifact_path: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/models/m-6b269fd3aa974e349a4477817e5c5df8/artifacts
+flavors:
+  lightgbm:
+    code: null
+    data: model.pkl
+    lgb_version: 4.6.0
+    model_class: lightgbm.sklearn.LGBMRegressor
+  python_function:
+    data: model.pkl
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.lightgbm
+    python_version: 3.13.7
+mlflow_version: 3.6.0
+model_id: m-6b269fd3aa974e349a4477817e5c5df8
+model_size_bytes: 885799
+model_uuid: m-6b269fd3aa974e349a4477817e5c5df8
+prompts: null
+run_id: f2222e65d6a74cc4a0b50fba93b18b44
+utc_time_created: '2025-11-18 02:01:21.364534'

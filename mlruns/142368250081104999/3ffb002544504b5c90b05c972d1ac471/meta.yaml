@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/3ffb002544504b5c90b05c972d1ac471/artifacts
+end_time: 1763412173065
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 3ffb002544504b5c90b05c972d1ac471
+run_name: upset-swan-690
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763412168876
+status: 3
+tags: []
+user_id: Anes

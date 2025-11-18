@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/c9ca959530364fa2b9e5fcc9c27c8830/artifacts
+end_time: 1763317827144
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: c9ca959530364fa2b9e5fcc9c27c8830
+run_name: delicate-panda-348
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763317824451
+status: 3
+tags: []
+user_id: Anes

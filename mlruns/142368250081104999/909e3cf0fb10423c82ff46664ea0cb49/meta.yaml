@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/909e3cf0fb10423c82ff46664ea0cb49/artifacts
+end_time: 1763427293625
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 909e3cf0fb10423c82ff46664ea0cb49
+run_name: legendary-carp-819
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763427289053
+status: 3
+tags: []
+user_id: Anes

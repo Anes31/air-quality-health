@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/5b104f88d37f48ba8945fa3aab6fdb32/artifacts
+end_time: 1763429968561
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 5b104f88d37f48ba8945fa3aab6fdb32
+run_name: marvelous-sheep-789
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763429964036
+status: 3
+tags: []
+user_id: Anes

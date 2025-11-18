@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/f2222e65d6a74cc4a0b50fba93b18b44/artifacts
+end_time: 1763431284944
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: f2222e65d6a74cc4a0b50fba93b18b44
+run_name: capable-conch-419
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763431279677
+status: 3
+tags: []
+user_id: Anes

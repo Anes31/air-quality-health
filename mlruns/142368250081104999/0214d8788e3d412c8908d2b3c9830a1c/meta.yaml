@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/0214d8788e3d412c8908d2b3c9830a1c/artifacts
+end_time: 1763410764887
+entry_point_name: ''
+experiment_id: '142368250081104999'
+lifecycle_stage: active
+run_id: 0214d8788e3d412c8908d2b3c9830a1c
+run_name: popular-sheep-571
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763410764852
+status: 4
+tags: []
+user_id: Anes

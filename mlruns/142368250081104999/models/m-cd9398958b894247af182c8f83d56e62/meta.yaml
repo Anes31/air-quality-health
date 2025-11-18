@@ -1,0 +1,10 @@
+artifact_location: file:///C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/mlruns/142368250081104999/models/m-cd9398958b894247af182c8f83d56e62/artifacts
+creation_timestamp: 1763425174141
+experiment_id: '142368250081104999'
+last_updated_timestamp: 1763425176932
+model_id: m-cd9398958b894247af182c8f83d56e62
+model_type: null
+name: model
+source_run_id: 8ec5ecc795744c7f9852f68bf24e67b5
+status: 2
+status_message: null
