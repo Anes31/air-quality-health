@@ -74,7 +74,7 @@ def main():
         mlflow.log_metric("rmse", rmse)
 
         # Log model to MLflow
-        mlflow.lightgbm.log_model(model, artifact_path="model")
+        mlflow.lightgbm.log_model(model, name="model")
 
         # Save locally for the API
         os.makedirs(os.path.dirname(MODEL_FILE), exist_ok=True)
