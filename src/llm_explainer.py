@@ -7,9 +7,11 @@ SYSTEM_PROMPT = (
     "Mention health impact briefly, especially for sensitive groups."
 )
 
-
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi3")
+# IMPORTANT:
+# Docker container connects to host Ollama via this env var:
+# export OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 
 
 def explain_forecast(
@@ -21,6 +23,7 @@ def explain_forecast(
     temp_c: float,
     humidity: float,
 ) -> str:
+
     user_prompt = (
         f"City: {city}\n"
         f"Forecast AQI in 3 hours: {aqi_3h:.2f} ({label_3h})\n"
@@ -30,18 +33,24 @@ def explain_forecast(
         "especially sensitive groups. Be specific but not alarmist."
     )
 
-    full_prompt = SYSTEM_PROMPT + "\n\n" + user_prompt
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
 
     resp = requests.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
+        f"{OLLAMA_BASE_URL}/api/chat",
         json={
             "model": OLLAMA_MODEL,
-            "prompt": full_prompt,
+            "messages": messages,
             "stream": False,
-            "max_tokens": 120,
         },
         timeout=30,
     )
+
     resp.raise_for_status()
     data = resp.json()
-    return data.get("response", "").strip()
+
+    # Ollama /api/chat format:
+    # { "message": { "role": "assistant", "content": "..." } }
+    return data.get("message", {}).get("content", "").strip()
