@@ -1,4 +1,4 @@
-# Environment variables
+# Environment
 .env
 
 # Python
@@ -28,3 +28,6 @@ mlruns/
 
 # VSCode
 .vscode/
+
+# OS junk
+.DS_Store
