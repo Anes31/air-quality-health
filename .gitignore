@@ -1,1 +1,30 @@
-$ git rm --cached .env
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+logs/
+*.log
+
+# Data
+data/
+*.jsonl
+*.parquet
+
+# Models
+models/
+*.pkl
+*.json
+
+# MLflow
+mlruns/
+
+# Docker
+*.tar
+
+# VSCode
+.vscode/
