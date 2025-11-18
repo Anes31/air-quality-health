@@ -9,13 +9,11 @@ This project is a complete end-to-end Machine Learning Engineering system that:
 * Parses raw data into a **clean Parquet dataset**
 * Trains a **3-hour AQI forecasting model** (LightGBM)
 * Serves predictions through a **FastAPI API**
-* Generates **LLM explanations** (Ollama or OpenAI-compatible)
+* Generates **LLM explanations** (Ollama)
 * Logs predictions + errors for **drift monitoring**
 * Monitors **schema drift**, **data drift**, and **model drift**
 * Runs inside **Docker** on a cloud VM (DigitalOcean)
 * Uses **cron jobs** to automate ingestion, ETL, training, drift jobs, and synthetic API traffic
-
-A full MLOps-ready project suitable for a professional portfolio.
 
 ---
 
@@ -44,7 +42,7 @@ src/
   backfill_model_error.py   # model drift tracking
   monitoring_utils.py       # PSI + drift utilities
   api.py                    # FastAPI: predictions + monitoring
-  llm_explainer.py          # local or OpenAI-compatible LLM
+  llm_explainer.py          # local
   risk_labels.py            # AQI category mapping
   run_hourly_etl.py         # for cron: ETL wrapper
   run_daily_train.py        # for cron: daily retraining wrapper
