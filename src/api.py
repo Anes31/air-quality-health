@@ -11,7 +11,14 @@ from .risk_labels import aqi_to_label
 from .llm_explainer import explain_forecast
 from pathlib import Path
 from src.monitoring_utils import compute_drift_metrics, psi_severity
+from src.auto_retrain import auto_retrain_model, should_retrain
 import requests
+from dotenv import load_dotenv
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+
+load_dotenv(ENV_PATH)
 
 EXPECTED_FEATURE_COLS = {
     "co", "no", "no2", "o3", "so2",
@@ -60,10 +67,15 @@ def send_alert(message: str):
         logger.warning(f"Alert requested but ALERT_WEBHOOK_URL not set. Message: {message}")
         return
     try:
-        requests.post(ALERT_WEBHOOK_URL, json={"text": message}, timeout=5)
+        resp = requests.post(
+            ALERT_WEBHOOK_URL,
+            json={"content": message},
+            timeout=5,
+        )
+        if resp.status_code != 204:     # Discord success = 204 No Content
+            logger.error(f"Discord webhook error {resp.status_code}: {resp.text}")
     except Exception as e:
         logger.error(f"Failed to send alert: {e}")
-
 
 def load_latest_per_city():
     if not os.path.exists(DATA_FILE):
@@ -221,6 +233,9 @@ def monitor_drift():
         )
         send_alert(msg)
 
+    if should_retrain() and overall_status in ("moderate_drift", "significant_drift"):
+        auto_retrain_model()
+
     return {
         "status": overall_status,
         "n_logs": int(n),
@@ -313,6 +328,9 @@ def monitor_model():
         )
     else:
         status = "no_drift"        
+
+    if should_retrain() and status=="drift_detected":
+        auto_retrain_model()
 
     return {
         "status": status,
