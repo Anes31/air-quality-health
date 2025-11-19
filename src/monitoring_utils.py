@@ -15,8 +15,18 @@ def psi_calculate(expected, actual, buckets=10):
     expected_perc = expected_counts / len(expected)
     actual_perc = actual_counts / len(actual)
 
+    # avoid zeros to prevent log/divide-by-zero -> NaN/inf
+    eps = 1e-6
+    expected_perc = np.where(expected_perc == 0, eps, expected_perc)
+    actual_perc   = np.where(actual_perc == 0,  eps, actual_perc)
+
     psi = np.sum((actual_perc - expected_perc) * np.log(actual_perc / expected_perc))
-    return psi
+
+    # final safety: make sure it's a finite float
+    if not np.isfinite(psi):
+        psi = 0.0
+
+    return float(psi)
 
 
 def compute_drift_metrics(baseline, recent, column):
