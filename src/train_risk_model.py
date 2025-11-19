@@ -5,10 +5,12 @@ from sklearn.metrics import mean_squared_error
 import numpy as np
 import joblib
 import mlflow
+from pathlib import Path
 
-DATA_FILE = os.path.join("data", "aq_clean.parquet")
-MODEL_FILE = os.path.join("models", "risk_model.pkl")
+BASE_DIR = Path(__file__).resolve().parent.parent  # /app
 
+DATA_FILE = BASE_DIR / "data" / "aq_clean.parquet"
+MODEL_FILE = BASE_DIR / "models" / "risk_model.pkl"
 
 def load_data():
     if not os.path.exists(DATA_FILE):

@@ -3,7 +3,14 @@ import joblib
 import os
 import time
 
-MODEL_PATH = os.path.join("models", "risk_model.pkl")
+
+# auto_retrain.py
+from pathlib import Path
+import subprocess
+
+BASE_DIR = Path(__file__).resolve().parent.parent   # /app
+MODEL_PATH = BASE_DIR / "models" / "risk_model.pkl"
+
 
 LAST_RETRAIN_TS = 0
 RETRAIN_COOLDOWN = 60 * 60  # 1 hour
@@ -31,7 +38,11 @@ def auto_retrain_model():
       - saves models/risk_model.pkl
     """
     # Run training script
-    subprocess.run(["python", "train_risk_model.py"], check=True)
+    subprocess.run(
+        ["python", "src/train_risk_model.py"],
+        cwd=BASE_DIR,
+        check=True,
+    )
 
     # Load the newly trained model for hot-reload
     if os.path.exists(MODEL_PATH):
