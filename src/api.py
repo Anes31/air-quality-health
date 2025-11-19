@@ -170,6 +170,11 @@ def monitor_drift():
 
     df = pd.read_json(log_path, lines=True)
 
+    # Hard cap to last N rows to avoid RAM spikes
+    N = 1000
+    if len(df) > N:
+        df = df.tail(N).copy()
+
     if len(df) < 100:
         return {
             "status": "insufficient_data",
@@ -179,6 +184,7 @@ def monitor_drift():
 
     # Ensure sorted by time
     df["logged_at_utc"] = pd.to_datetime(df["logged_at_utc"])
+    df["logged_at_utc"] = pd.to_datetime(df["logged_at_utc"], format="ISO8601", utc=True, errors="coerce")
     df = df.sort_values("logged_at_utc")
 
     n = len(df)
