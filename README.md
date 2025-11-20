@@ -1,245 +1,247 @@
-# Air Quality Health Risk Pipeline
+# Air Quality Health Risk Pipeline (Updated)
 
-## Overview
-
-This project is a complete end-to-end Machine Learning Engineering system that:
-
-* Ingests **live air quality + weather data** from OpenWeatherMap
-* Stores raw data as an **append-only JSONL stream**
-* Parses raw data into a **clean Parquet dataset**
-* Trains a **3-hour AQI forecasting model** (LightGBM)
-* Serves predictions through a **FastAPI API**
-* Generates **LLM explanations** (Ollama)
-* Logs predictions + errors for **drift monitoring**
-* Monitors **schema drift**, **data drift**, and **model drift**
-* Runs inside **Docker** on a cloud VM (DigitalOcean)
-* Uses **cron jobs** to automate ingestion, ETL, training, drift jobs, and synthetic API traffic
+This project is a **full end-to-end MLOps system** that continuously ingests live air‑quality data, cleans it, retrains forecasting models, serves predictions through an API, monitors operational & ML drift, and automatically triggers alerts and retraining — all running inside **Docker** with **cron‑driven automation**.
 
 ---
 
-## Tech Stack
+## 🚀 System Overview
 
-* Python
-* FastAPI + Uvicorn
-* LightGBM / scikit-learn
-* Pandas + PyArrow
-* MLflow
-* Docker
-* DigitalOcean (Ubuntu)
-* Cron automation
-* OpenWeatherMap Air Pollution + Weather APIs
-* Ollama (local LLM for explanations)
+The pipeline performs the following:
+
+- **Ingest live air‑quality + weather data** from OpenWeatherMap every 5 minutes
+- Store raw unmodified responses in an **append‑only JSONL log**
+- Convert raw logs into a **clean Parquet dataset** for training & inference
+- Train a **3‑hour AQI forecasting model** (LightGBM)
+- Serve predictions and explanations via a **FastAPI microservice**
+- Generate **LLM explanations** using Ollama (local model)
+- Log predictions for **latency tracking, drift detection, and traffic analysis**
+- Detect **schema drift**, **data drift**, **model drift**, and **traffic anomalies**
+- Perform **auto‑retraining** when drift thresholds are exceeded
+- Send **alerts** for failures, drift events, or API performance issues
+- Run inside **Docker** and fully orchestrated with **cron jobs**
 
 ---
 
-## Project Structure
+## 🧱 Tech Stack
 
-```text
-src/
-  ingest_air_quality.py     # live ingestion (raw JSON stream)
-  parse_air_quality.py      # ETL: raw → clean Parquet
-  train_risk_model.py       # model training + MLflow logging
-  backfill_model_error.py   # model drift tracking
-  monitoring_utils.py       # PSI + drift utilities
-  api.py                    # FastAPI: predictions + monitoring
-  llm_explainer.py          # local
-  risk_labels.py            # AQI category mapping
-  run_hourly_etl.py         # for cron: ETL wrapper
-  run_daily_train.py        # for cron: daily retraining wrapper
-data/
-  aq_raw.jsonl              # append-only raw logs
-  aq_clean.parquet          # cleaned dataset
-models/
-  risk_model.pkl            # trained forecasting model
-  model_metadata.json       # RMSE + timestamp
-logs/
-  predictions.jsonl         # API logs
-  model_performance.jsonl   # backfilled model drift logs
-Dockerfile
-requirements.txt
-.env                        # (not committed)
-README.md
+- **Python**, Pandas, NumPy
+- **FastAPI** + Uvicorn
+- **LightGBM / scikit-learn**
+- **MLflow**
+- **Docker / Docker Compose**
+- **Cron** for automation
+- **OpenWeatherMap** (Air Pollution + Weather)
+- **Ollama** for LLM explanations
+- **Ubuntu (DigitalOcean / local VM)**
+
+---
+
+## 📁 Project Structure
+
+```
+├── data/
+│   ├── aq_raw.jsonl            # append-only raw logs
+│   └── aq_clean.parquet        # cleaned feature dataset
+│
+├── logs/
+│   ├── predictions.jsonl       # API prediction + latency logs
+│   └── model_performance.jsonl # backfilled error logs (model drift)
+│
+├── models/
+│   └── risk_model.pkl          # trained LightGBM model
+│
+├── scripts/
+│   ├── backfill_model_error.py # hourly backfill for model drift
+│   ├── run_daily_train.py      # cron: daily retraining
+│   ├── run_hourly_etl.py       # cron: ETL wrapper
+│   └── quick_forecast.py       # dev-only
+│
+├── src/
+│   ├── api.py                  # FastAPI application
+│   ├── ingest_air_quality.py   # live ingestion (raw → JSONL)
+│   ├── parse_air_quality.py    # ETL to Parquet
+│   ├── train_risk_model.py     # model training
+│   ├── llm_explainer.py        # Ollama explanation generation
+│   ├── risk_labels.py          # AQI → health risk category
+│   │
+│   └── monitoring/             # full monitoring suite
+│       ├── alerts.py
+│       ├── drift.py
+│       ├── latency.py
+│       ├── logging.py
+│       ├── schema.py
+│       ├── traffic.py
+│       └── utils.py
+│
+├── docker-compose.yml          # API + MLflow services
+├── Dockerfile
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
-## Running the Pipeline Locally
+## 🖥️ Running Locally (Development)
 
-### 1) Ingest live data
-
+### 1. Ingest live data
 ```bash
 python src/ingest_air_quality.py
 ```
 
-### 2) ETL: raw → clean
-
+### 2. ETL (raw → clean)
 ```bash
 python src/parse_air_quality.py
 ```
 
-### 3) Train model + log to MLflow
-
+### 3. Train the forecasting model
 ```bash
 python src/train_risk_model.py
 ```
 
-### 4) Start API
-
+### 4. Start the API
 ```bash
 uvicorn src.api:app --reload
 ```
+Docs: http://localhost:8000/docs
 
-### 5) (Optional) MLflow UI
-
+### 5. Start MLflow locally (no Docker)
 ```bash
-mlflow ui
+mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
 ```
+
+### ⚠️ Local vs Server: LLM Behavior
+- **Locally:** Ollama runs normally and provides natural-language explanations.
+- **On the server:** If Ollama is not installed (or RAM is limited), the API automatically falls back to a lightweight string‑only explanation function (no LLM cost, no RAM overhead).
 
 ---
 
-## Docker Usage
+## ☁️ Running on the Server (DigitalOcean VM)
 
-### Build image
+On the VM, **you only use `docker-compose`** — no building images manually.
+Everything is preconfigured: API service, MLflow, volumes.
 
+### Start all services
 ```bash
-docker build -t air-quality-api .
+docker-compose up -d --build
 ```
 
-### Run container (Windows)
-
-```bash
-docker run ^
-  --env-file .env ^
-  -p 8000:8000 ^
-  -v "%cd%/data:/app/data" ^
-  -v "%cd%/models:/app/models" ^
-  -v "%cd%/logs:/app/logs" ^
-  air-quality-api
+### MLflow UI on the server
+Accessible at:
+```
+http://YOUR_SERVER_IP:5000
 ```
 
-### Run container (Linux/macOS)
-
-```bash
-docker run \
-  --env-file .env \
-  -p 8000:8000 \
-  -v "$PWD/data:/app/data" \
-  -v "$PWD/models:/app/models" \
-  -v "$PWD/logs:/app/logs" \
-  air-quality-api
-```
-
-API docs:
-[http://localhost:8000/docs](http://localhost:8000/docs)
+`docker-compose.yml` manages:
+- API service
+- MLflow tracking server
+- Shared volumes for MLruns, logs, data, models
 
 ---
 
-## Deploying on DigitalOcean (Ubuntu VM)
+## ⏱ Cron Automation (Production)
 
-### Clone repo + add `.env`
-
-```bash
-git clone https://github.com/YOUR_USERNAME/air-quality-health.git
-cd air-quality-health
-nano .env
-```
-
-### Build container
-
-```bash
-docker build -t air-quality-api .
-```
-
-### Run container
-
-```bash
-docker run -d \
-  --name air-quality-api \
-  --env-file .env \
-  -p 8000:8000 \
-  -v "$(pwd)/data:/app/data" \
-  -v "$(pwd)/models:/app/models" \
-  -v "$(pwd)/logs:/app/logs" \
-  air-quality-api
-```
-
-API URL:
-http://YOUR_SERVER_IP:8000/docs
-
----
-
-## Cron Automation (Production)
-
-Edit crontab:
-
+Open crontab:
 ```bash
 crontab -e
 ```
 
-### Ingest + ETL (every 5 min)
-
+### Ingestion + ETL (every 5 minutes)
 ```bash
 */5 * * * * docker exec air-quality-api python src/ingest_air_quality.py
 */5 * * * * docker exec air-quality-api python src/parse_air_quality.py
 ```
 
 ### Daily retraining (3 AM)
-
 ```bash
 0 3 * * * docker exec air-quality-api python src/train_risk_model.py
 ```
 
-### Model drift logging (hourly)
-
+### Model drift backfill (hourly)
 ```bash
-5 * * * * docker exec air-quality-api python src/backfill_model_error.py
+5 * * * * docker exec air-quality-api python scripts/backfill_model_error.py
 ```
 
-### Simulated API traffic (LLM explanations)
-
+### Simulated API traffic
 ```bash
 */30 * * * * curl -s http://localhost:8000/forecast/3h/explain > /dev/null
 ```
 
-### Automated monitoring
-
+### Monitoring suite
 ```bash
 10 * * * * curl -s http://localhost:8000/monitor/schema > /dev/null
 11 * * * * curl -s http://localhost:8000/monitor/data_drift > /dev/null
 12 * * * * curl -s http://localhost:8000/monitor/model > /dev/null
+*  * * * * curl -sf http://localhost:8000/health || curl -H "Content-Type: application/json" -d '{"alert": "API down"}' YOUR_ALERT_ENDPOINT
 ```
 
 ---
 
-## Log Rotation (Ubuntu)
+## 🔍 Monitoring Endpoints
 
-Create:
+### `/monitor/schema`
+- Detects schema mismatches between live data and model features
 
+### `/monitor/data_drift`
+- Tracks distribution shift using recent prediction logs
+- Includes auto-drift alerts and optional auto-retraining
+
+### `/monitor/model`
+- Checks degradation over time via RMSE comparison
+
+### `/monitor/traffic`
+- Detects spikes/drops in API usage
+
+### `/forecast/3h/explain`
+- Returns prediction
+- Health label
+- Latency
+- LLM explanation of AQI risks
+
+---
+
+## 🔔 Alerts & Auto-Retraining
+The monitoring suite uses the following rules:
+
+- **Schema Drift:** missing/extra columns → alert + fail prediction
+- **Data Drift:** moderate/significant drift → alert + optional auto‑retrain
+- **Model Drift:** RMSE shift ≥ 0.25 → alert + auto‑retrain
+- **Latency:** slow prediction → alert
+- **Traffic:** large spike/drop → alert
+- **API down:** health check fallback curl fires alert
+
+---
+
+## 🔒 Environment Variables (`.env`)
+
+```
+OWM_API_KEY=...
+LATENCY_THRESHOLD_SECONDS=2.0
+MODEL_FILE=models/risk_model.pkl
+DATA_FILE=data/aq_clean.parquet
+PREDICTIONS_LOG_FILE=logs/predictions.jsonl
+MODEL_PERF_LOG_FILE=logs/model_performance.jsonl
+```
+
+`.env` **must not be committed**.
+
+---
+
+## 📝 Useful Commands
 ```bash
-sudo nano /etc/logrotate.d/airq
-```
-
-Add:
-
-```text
-/root/air-quality-health/logs/*.jsonl {
-    daily
-    rotate 7
-    compress
-    missingok
-    notifempty
-    copytruncate
-}
+git pull origin main
+docker-compose up -d --build
+docker-compose logs -f
+docker logs --tail 50 air-quality-api
+docker-compose down
+docker-compose restart api
 ```
 
 ---
 
-## Notes
-
-* `.env` is **not committed** to GitHub
-* Drift detection (schema, data, model) is automated
-* Uses **local LLM** for explanations (no API cost)
-* Dockerized + cron-driven → production-like MLOps
-* Cloud VM stores data, models, and logs persistently
+## 📌 Notes
+- Everything is designed to run continuously with minimal supervision
+- Auto‑drift detection + retraining makes this a production‑style MLOps system
+- Local LLM explanations avoid external API cost
+- Docker + cron create a stable, repeatable runtime
 
 ---
