@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_squared_error
@@ -9,11 +10,13 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # /app
 
-DATA_FILE = BASE_DIR / "data" / "aq_clean.parquet"
+DATA_FILE  = BASE_DIR / "data"   / "aq_clean.parquet"
 MODEL_FILE = BASE_DIR / "models" / "risk_model.pkl"
+META_FILE  = BASE_DIR / "models" / "risk_model_meta.json"
+
 
 def load_data():
-    if not os.path.exists(DATA_FILE):
+    if not DATA_FILE.exists():
         raise FileNotFoundError(f"No clean data file at {DATA_FILE}")
     df = pd.read_parquet(DATA_FILE)
 
@@ -21,22 +24,40 @@ def load_data():
     df = df.dropna(subset=["aqi_future_3h", "pm2_5", "pm10", "temp_c", "humidity"])
     return df
 
-def build_features(df: pd.DataFrame):
-    
-    feature_cols = ["co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3", "temp_c", "humidity",
-    # Lag features:
-    "aqi_lag1", "aqi_lag2", "aqi_lag3",
-    "pm2_5_lag1", "pm2_5_lag2", "pm2_5_lag3",
-    "pm10_lag1", "pm10_lag2", "pm10_lag3",
-    "o3_lag1", "o3_lag2", "o3_lag3",
-    "temp_c_lag1", "temp_c_lag2", "temp_c_lag3",
-    "humidity_lag1", "humidity_lag2", "humidity_lag3",
-]
 
+def build_features(df: pd.DataFrame):
+    feature_cols = [
+        "co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3", "temp_c", "humidity",
+        # Lag features:
+        "aqi_lag1", "aqi_lag2", "aqi_lag3",
+        "pm2_5_lag1", "pm2_5_lag2", "pm2_5_lag3",
+        "pm10_lag1", "pm10_lag2", "pm10_lag3",
+        "o3_lag1", "o3_lag2", "o3_lag3",
+        "temp_c_lag1", "temp_c_lag2", "temp_c_lag3",
+        "humidity_lag1", "humidity_lag2", "humidity_lag3",
+    ]
 
     X = df[feature_cols]
     y = df["aqi_future_3h"]
     return X, y
+
+
+def load_prev_rmse():
+    if not META_FILE.exists():
+        return None
+    try:
+        with open(META_FILE, "r") as f:
+            meta = json.load(f)
+        val = meta.get("rmse")
+        return float(val) if val is not None else None
+    except Exception:
+        return None
+
+
+def save_meta(rmse: float, n_rows: int):
+    META_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(META_FILE, "w") as f:
+        json.dump({"rmse": rmse, "n_rows": n_rows}, f)
 
 
 def main():
@@ -69,19 +90,33 @@ def main():
         model.fit(X_train, y_train)
 
         preds = model.predict(X_test)
-        rmse = np.sqrt(mean_squared_error(y_test, preds))
+        rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
         print(f"LightGBM RMSE: {rmse:.4f}")
 
         mlflow.log_metric("rmse", rmse)
-
-        # Log model to MLflow
         mlflow.lightgbm.log_model(model, name="model")
 
-        # Save locally for the API
-        os.makedirs(os.path.dirname(MODEL_FILE), exist_ok=True)
-        joblib.dump(model, MODEL_FILE)
-        print(f"Saved model to {MODEL_FILE}")
+        prev_rmse = load_prev_rmse()
 
+        if (prev_rmse is None) or (rmse <= prev_rmse):
+            MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump(model, MODEL_FILE)
+            save_meta(rmse, n_rows)
+            if prev_rmse is None:
+                print(
+                    f"✅ Saved model to {MODEL_FILE} "
+                    f"(no previous RMSE, new_rmse={rmse:.4f})"
+                )
+            else:
+                print(
+                    f"✅ Saved model to {MODEL_FILE} "
+                    f"(prev_rmse={prev_rmse:.4f}, new_rmse={rmse:.4f})"
+                )
+        else:
+            print(
+                f"⚠️ Not saving model: new_rmse={rmse:.4f} "
+                f"is worse than prev_rmse={prev_rmse:.4f}"
+            )
 
 
 if __name__ == "__main__":
