@@ -14,9 +14,13 @@ from src.monitoring_utils import compute_drift_metrics, psi_severity
 from src.auto_retrain import auto_retrain_model, should_retrain
 import requests
 from dotenv import load_dotenv
+import time
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
+
+LATENCY_THRESHOLD_SECONDS = float(os.getenv("LATENCY_THRESHOLD_SECONDS", "0.5"))
 
 load_dotenv(ENV_PATH)
 
@@ -62,20 +66,24 @@ def log_predictions(results, endpoint: str):
 
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL")
 
-def send_alert(message: str):
+def send_alert(title: str, details: dict | None = None):
     if not ALERT_WEBHOOK_URL:
-        logger.warning(f"Alert requested but ALERT_WEBHOOK_URL not set. Message: {message}")
+        logger.warning(f"Alert requested but ALERT_WEBHOOK_URL not set. Title: {title}, details: {details}")
         return
+
+    lines = [f"**{title}**"]
+    if details:
+        for k, v in details.items():
+            lines.append(f"- **{k}**: {v}")
+    payload = {"content": "\n".join(lines)}
+
     try:
-        resp = requests.post(
-            ALERT_WEBHOOK_URL,
-            json={"content": message},
-            timeout=5,
-        )
-        if resp.status_code != 204:     # Discord success = 204 No Content
+        resp = requests.post(ALERT_WEBHOOK_URL, json=payload, timeout=5)
+        if resp.status_code != 204:
             logger.error(f"Discord webhook error {resp.status_code}: {resp.text}")
     except Exception as e:
         logger.error(f"Failed to send alert: {e}")
+
 
 def load_latest_per_city():
     if not os.path.exists(DATA_FILE):
@@ -101,78 +109,195 @@ async def lifespan(app: FastAPI):
     if not os.path.exists(MODEL_FILE):
         raise RuntimeError("Model file not found. Train the model first.")
     app.state.model = joblib.load(MODEL_FILE)
-    print("Model loaded successfully.")
-    
-    yield  # <-- the app runs here
-    
-    # Shutdown (nothing to clean up yet)
-    print("Shutting down.")
+    logger.info("Model loaded successfully.")
+    send_alert(
+        "MODEL LOADED",
+        {
+            "model_file": MODEL_FILE,
+            "loaded_at_utc": datetime.now(UTC).isoformat(),
+        },
+    )
 
+    yield  # <-- the app runs here
+
+    # Shutdown
+    logger.info("Shutting down.")
+    send_alert(
+        "API SHUTDOWN",
+        {
+            "time_utc": datetime.now(UTC).isoformat(),
+        },
+    )
 
 app = FastAPI(
     title="Air Quality Health Risk API",
     lifespan=lifespan
 )
 
+@app.get("/health")
+def health():
+    """Simple liveness + readiness check."""
+    model_loaded = hasattr(app.state, "model")
+    model_exists = os.path.exists(MODEL_FILE)
+
+    status = "ok" if (model_loaded and model_exists) else "degraded"
+
+    return {
+        "status": status,
+        "time_utc": datetime.now(UTC).isoformat(),
+        "model_loaded": bool(model_loaded),
+        "model_file_exists": bool(model_exists),
+    }
+
+
 @app.get("/forecast/3h/explain")
 def forecast_3h_explain():
     try:
         df = load_latest_per_city()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    X = build_features(df)
-
-    # Schema drift check
-    missing = EXPECTED_FEATURE_COLS - set(X.columns)
-    extra = set(X.columns) - EXPECTED_FEATURE_COLS
-
-    if missing or extra:
-        logger.error(f"Schema drift detected. Missing: {missing}, Extra: {extra}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Schema mismatch",
-                "missing_columns": list(missing),
-                "extra_columns": list(extra),
+        # alert + clean error to client
+        send_alert(
+            "PREDICTION ERROR",
+            {
+                "step": "load_latest_per_city",
+                "error": str(e),
             },
         )
+        raise HTTPException(status_code=500, detail="Failed to load latest data.")
+    
+    try:
+        X = build_features(df)
 
-    preds = app.state.model.predict(X)
+        # Schema drift check
+        missing = EXPECTED_FEATURE_COLS - set(X.columns)
+        extra = set(X.columns) - EXPECTED_FEATURE_COLS
 
-
-    results = []
-    for (_, row), future_aqi in zip(df.iterrows(), preds):
-        future_aqi = float(future_aqi)
-        label = aqi_to_label(future_aqi)
-
-        try:
-            explanation = explain_forecast(
-                city=row["city"],
-                aqi_3h=future_aqi,
-                label_3h=label,
-                pm25=row["pm2_5"],
-                pm10=row["pm10"],
-                temp_c=row["temp_c"],
-                humidity=row["humidity"],
+        if missing or extra:
+            logger.error(f"Schema drift detected. Missing: {missing}, Extra: {extra}")
+            send_alert(
+                "PREDICTION ERROR",
+                {
+                    "step": "schema_check",
+                    "missing": list(missing),
+                    "extra": list(extra),
+                },
             )
-        except Exception as e:
-            explanation = f"LLM explanation unavailable: {e}"
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Schema mismatch",
+                    "missing_columns": list(missing),
+                    "extra_columns": list(extra),
+                },
+            )
 
-        results.append({
-            "timestamp_utc": row["timestamp_utc"],
-            "city": row["city"],
-            "predicted_aqi_3h": future_aqi,
-            "predicted_label_3h": label,
-            "pm2_5": row["pm2_5"],
-            "pm10": row["pm10"],
-            "temp_c": row["temp_c"],
-            "humidity": row["humidity"],
-            "explanation": explanation,
-        })
+        # Measure prediction latency
+        t0 = time.perf_counter()
+        preds = app.state.model.predict(X)
+        latency_s = time.perf_counter() - t0
 
-    log_predictions(results, endpoint="/forecast/3h/explain")
-    return {"results": results}
+        # alert on slow calls
+        if latency_s > LATENCY_THRESHOLD_SECONDS:
+            send_alert(
+                "HIGH LATENCY",
+                {
+                    "endpoint": "/forecast/3h/explain",
+                    "latency_seconds": round(latency_s, 3),
+                    "n_rows": int(len(X)),
+                },
+            )
+
+        preds = app.state.model.predict(X)
+
+        results = []
+        for (_, row), future_aqi in zip(df.iterrows(), preds):
+            future_aqi = float(future_aqi)
+            label = aqi_to_label(future_aqi)
+
+            try:
+                explanation = explain_forecast(
+                    city=row["city"],
+                    aqi_3h=future_aqi,
+                    label_3h=label,
+                    pm25=row["pm2_5"],
+                    pm10=row["pm10"],
+                    temp_c=row["temp_c"],
+                    humidity=row["humidity"],
+                )
+            except Exception as e:
+                explanation = f"LLM explanation unavailable: {e}"
+
+            results.append({
+                "timestamp_utc": row["timestamp_utc"],
+                "city": row["city"],
+                "predicted_aqi_3h": future_aqi,
+                "predicted_label_3h": label,
+                "pm2_5": row["pm2_5"],
+                "pm10": row["pm10"],
+                "temp_c": row["temp_c"],
+                "humidity": row["humidity"],
+                "explanation": explanation,
+                "latency_seconds": latency_s,
+            })
+
+        log_predictions(results, endpoint="/forecast/3h/explain")
+        return {"results": results}
+
+    except HTTPException:
+        # already handled above (schema / data issues)
+        raise
+    except Exception as e:
+        logger.exception("Unexpected error in /forecast/3h/explain")
+        send_alert(
+            "PREDICTION ERROR",
+            {
+                "step": "forecast_3h_explain",
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=500, detail="Internal error during forecast.")
+
+@app.get("/monitor/schema")
+def monitor_schema():
+    if not os.path.exists(DATA_FILE):
+        raise HTTPException(status_code=404, detail="Clean data file not found")
+
+    try:
+        df_raw = pd.read_parquet(DATA_FILE)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read data: {e}")
+
+    if df_raw.empty:
+        return {
+            "status": "empty_data",
+            "detail": "Clean data file is empty.",
+        }
+
+    # Use a small sample to infer available feature columns
+    sample = df_raw.tail(10).copy()
+    X = build_features(sample)
+
+    current_cols = set(X.columns)
+    missing = EXPECTED_FEATURE_COLS - current_cols
+    extra = current_cols - EXPECTED_FEATURE_COLS
+
+    status = "ok"
+    if missing or extra:
+        status = "mismatch"
+
+    col_types = {col: str(dtype) for col, dtype in X.dtypes.items()}
+
+    if status == "mismatch":  # for schema
+        send_alert(f"[SCHEMA DRIFT] Missing: {missing}, Extra: {extra}")
+
+    return {
+        "status": status,
+        "n_rows_checked": int(len(sample)),
+        "missing_columns": list(missing),
+        "extra_columns": list(extra),
+        "column_types": col_types,
+    }
+
 
 @app.get("/monitor/data_drift")
 def monitor_drift():
@@ -219,69 +344,56 @@ def monitor_drift():
     inv_severity_map = {0: "no_drift", 1: "moderate_drift", 2: "significant_drift"}
     overall_status = inv_severity_map.get(overall_level, "insufficient_data")
 
-    # 🔔 send alert if overall drift is moderate or significant
+    # Send alert if overall drift is moderate or significant
     if overall_status in ("moderate_drift", "significant_drift"):
-        # list only features with drift
         drifted_features = [
             f"{name} (PSI={metrics['PSI']:.3f}, sev={metrics['severity']})"
             for name, metrics in report.items()
             if metrics["severity"] in ("moderate_drift", "significant_drift")
         ]
-        msg = (
-            f"[DATA DRIFT] Overall status={overall_status.upper()}, "
-            f"n_logs={n}. Drifted features: " + ", ".join(drifted_features)
-        )
-        send_alert(msg)
+
+    send_alert(
+        "DATA DRIFT",
+        {
+            "severity": overall_status,
+            "n_logs": n,
+            "drifted_features": ", ".join(drifted_features),
+        },
+    )
 
     if should_retrain() and overall_status in ("moderate_drift", "significant_drift"):
-        auto_retrain_model()
+        send_alert(
+            "RETRAIN STARTED",
+            {
+                "trigger": "data_drift",
+                "overall_status": overall_status,
+                "n_logs": int(n),
+            },
+        )
+        try:
+            res = auto_retrain_model()
+            send_alert(
+                "RETRAIN RESULT",
+                {
+                    "trigger": "data_drift",
+                    "status": res.get("status"),
+                    "message": res.get("message"),
+                    "model_path": str(res.get("model_path", "")),
+                },
+            )
+        except Exception as e:
+            send_alert(
+                "RETRAIN FAILED",
+                {
+                    "trigger": "data_drift",
+                    "error": str(e),
+                },
+            )
 
     return {
         "status": overall_status,
         "n_logs": int(n),
         "features": report,
-    }
-
-
-@app.get("/monitor/schema")
-def monitor_schema():
-    if not os.path.exists(DATA_FILE):
-        raise HTTPException(status_code=404, detail="Clean data file not found")
-
-    try:
-        df_raw = pd.read_parquet(DATA_FILE)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read data: {e}")
-
-    if df_raw.empty:
-        return {
-            "status": "empty_data",
-            "detail": "Clean data file is empty.",
-        }
-
-    # Use a small sample to infer available feature columns
-    sample = df_raw.tail(10).copy()
-    X = build_features(sample)
-
-    current_cols = set(X.columns)
-    missing = EXPECTED_FEATURE_COLS - current_cols
-    extra = current_cols - EXPECTED_FEATURE_COLS
-
-    status = "ok"
-    if missing or extra:
-        status = "mismatch"
-
-    col_types = {col: str(dtype) for col, dtype in X.dtypes.items()}
-
-    if status == "mismatch":  # for schema
-        send_alert(f"[SCHEMA DRIFT] Missing: {missing}, Extra: {extra}")
-
-    return {
-        "status": status,
-        "n_rows_checked": int(len(sample)),
-        "missing_columns": list(missing),
-        "extra_columns": list(extra),
-        "column_types": col_types,
     }
 
 
@@ -323,14 +435,48 @@ def monitor_model():
     if delta >= threshold:
         status = "drift_detected"
         send_alert(
-            f"[MODEL DRIFT] RMSE worsened from {baseline_rmse:.3f} to {recent_rmse:.3f} "
-            f"(Δ={delta:.3f}, threshold={threshold})"
+            "MODEL DRIFT",
+            {
+                "baseline_rmse": round(baseline_rmse, 3),
+                "recent_rmse": round(recent_rmse, 3),
+                "delta_rmse": round(delta, 3),
+                "threshold": threshold,
+                "n_records": n,
+            },
         )
     else:
-        status = "no_drift"        
+        status = "no_drift"
 
-    if should_retrain() and status=="drift_detected":
-        auto_retrain_model()
+
+    if should_retrain() and status == "drift_detected":
+        send_alert(
+            "RETRAIN STARTED",
+            {
+                "trigger": "model_drift",
+                "delta_rmse": round(delta, 3),
+                "threshold": threshold,
+                "n_records": int(n),
+            },
+        )
+        try:
+            res = auto_retrain_model()
+            send_alert(
+                "RETRAIN RESULT",
+                {
+                    "trigger": "model_drift",
+                    "status": res.get("status"),
+                    "message": res.get("message"),
+                    "model_path": str(res.get("model_path", "")),
+                },
+            )
+        except Exception as e:
+            send_alert(
+                "RETRAIN FAILED",
+                {
+                    "trigger": "model_drift",
+                    "error": str(e),
+                },
+            )
 
     return {
         "status": status,
@@ -340,3 +486,70 @@ def monitor_model():
         "delta_rmse": delta,
         "threshold": threshold,
     }
+
+@app.get("/monitor/traffic")
+def monitor_traffic(window_minutes: int = 10):
+    """
+    Simple traffic monitor: compares last `window_minutes` to the previous window.
+    Sends alert on big drop or spike.
+    """
+    log_path = Path("logs") / "predictions.jsonl"
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="No prediction logs found yet")
+
+    df = pd.read_json(log_path, lines=True)
+    if df.empty:
+        return {
+            "status": "no_data",
+            "detail": "No prediction logs to analyze.",
+        }
+
+    df["logged_at_utc"] = pd.to_datetime(
+        df["logged_at_utc"], utc=True, errors="coerce"
+    )
+
+    now = datetime.now(UTC)
+    window = pd.Timedelta(minutes=window_minutes)
+
+    recent = df[df["logged_at_utc"] >= now - window]
+    previous = df[
+        (df["logged_at_utc"] < now - window) &
+        (df["logged_at_utc"] >= now - 2 * window)
+    ]
+
+    recent_rpm = len(recent) / window_minutes
+    prev_rpm = len(previous) / window_minutes if len(previous) > 0 else None
+
+    status = "ok"
+    info = {
+        "window_minutes": window_minutes,
+        "recent_count": int(len(recent)),
+        "recent_rpm": recent_rpm,
+        "previous_count": int(len(previous)),
+        "previous_rpm": prev_rpm,
+    }
+
+    # only compare if we have a previous window
+    if prev_rpm and prev_rpm > 0:
+        ratio = recent_rpm / prev_rpm
+        if ratio <= 0.2:
+            status = "volume_drop"
+            send_alert(
+                "TRAFFIC DROP",
+                {
+                    **info,
+                    "ratio": round(ratio, 3),
+                },
+            )
+        elif ratio >= 5.0:
+            status = "volume_spike"
+            send_alert(
+                "TRAFFIC SPIKE",
+                {
+                    **info,
+                    "ratio": round(ratio, 3),
+                },
+            )
+
+    info["status"] = status
+    return info
