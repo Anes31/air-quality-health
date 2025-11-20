@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  api:
+    container_name: air-quality-api
+    build: .
+    image: air-quality-api
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - /root/air-quality-health/data:/app/data
+      - /root/air-quality-health/models:/app/models
+      - /root/air-quality-health/logs:/app/logs
+      - aq-mlflow:/app/mlruns
+    healthcheck:
+      # adjust URL if you later add a dedicated /health endpoint
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  mlflow-ui:
+    container_name: mlflow-ui
+    image: air-quality-api
+    restart: always
+    depends_on:
+      - api
+    command: mlflow ui --backend-store-uri /app/mlruns --host 0.0.0.0 --port 5000
+    environment:
+      - MLFLOW_SERVER_ALLOWED_HOSTS=*
+    ports:
+      - "5000:5000"
+    volumes:
+      - aq-mlflow:/app/mlruns
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  aq-mlflow:
