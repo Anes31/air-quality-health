@@ -18,10 +18,14 @@ data/
 # Models
 models/
 *.pkl
-*.json
+# Only ignore model metadata, not all json files
+models/*.json
 
 # MLflow
 mlruns/
+
+# Jupyter
+.ipynb_checkpoints/
 
 # Docker
 *.tar
@@ -31,3 +35,8 @@ mlruns/
 
 # OS junk
 .DS_Store
+
+# Python packaging build artifacts
+build/
+dist/
+*.egg-info/
