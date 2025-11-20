@@ -1,12 +1,8 @@
-import subprocess
-import joblib
 import os
+import joblib
 import time
-
-
-# auto_retrain.py
 from pathlib import Path
-import subprocess
+from src.train_risk_model import train_and_maybe_save
 
 BASE_DIR = Path(__file__).resolve().parent.parent   # /app
 MODEL_PATH = BASE_DIR / "models" / "risk_model.pkl"
@@ -30,30 +26,23 @@ def should_retrain():
 
 def auto_retrain_model():
     """
-    Calls train_risk_model.py, which:
-      - loads data
-      - builds features
-      - trains LightGBM
-      - logs to MLflow
-      - saves models/risk_model.pkl
+    Trains the model and returns RMSE info + save status.
     """
-    # Run training script
-    subprocess.run(
-        ["python", "src/train_risk_model.py"],
-        cwd=BASE_DIR,
-        check=True,
-    )
+    res = train_and_maybe_save()
 
-    # Load the newly trained model for hot-reload
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-        return {
-            "status": "success",
-            "model_path": MODEL_PATH,
-            "message": "Model retrained and saved."
-        }
+    if res["did_save"] and res.get("model_path") and os.path.exists(res["model_path"]):
+        _ = joblib.load(res["model_path"])
+        status = "success"
+        message = "Model retrained and saved."
     else:
-        return {
-            "status": "error",
-            "message": "Training script ran but model file was not created."
-        }
+        status = "no_save"
+        message = "Model trained but not saved (RMSE worse than previous)."
+
+    return {
+        "status": status,
+        "model_path": res.get("model_path"),
+        "message": message,
+        "prev_rmse": res.get("prev_rmse"),
+        "new_rmse": res.get("rmse"),
+        "n_rows": res.get("n_rows"),
+    }

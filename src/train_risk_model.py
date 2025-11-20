@@ -41,7 +41,6 @@ def build_features(df: pd.DataFrame):
     y = df["aqi_future_3h"]
     return X, y
 
-
 def load_prev_rmse():
     if not META_FILE.exists():
         return None
@@ -60,7 +59,7 @@ def save_meta(rmse: float, n_rows: int):
         json.dump({"rmse": rmse, "n_rows": n_rows}, f)
 
 
-def main():
+def train_and_maybe_save():
     df = load_data()
     n_rows = len(df)
     print(f"Loaded {n_rows} rows for training.")
@@ -97,11 +96,16 @@ def main():
         mlflow.lightgbm.log_model(model, name="model")
 
         prev_rmse = load_prev_rmse()
+        did_save = False
+        saved_model_path = None
 
         if (prev_rmse is None) or (rmse <= prev_rmse):
             MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
             joblib.dump(model, MODEL_FILE)
             save_meta(rmse, n_rows)
+            did_save = True
+            saved_model_path = MODEL_FILE
+
             if prev_rmse is None:
                 print(
                     f"✅ Saved model to {MODEL_FILE} "
@@ -117,6 +121,19 @@ def main():
                 f"⚠️ Not saving model: new_rmse={rmse:.4f} "
                 f"is worse than prev_rmse={prev_rmse:.4f}"
             )
+
+    return {
+        "rmse": rmse,
+        "prev_rmse": prev_rmse,
+        "n_rows": n_rows,
+        "did_save": did_save,
+        "model_path": str(saved_model_path) if saved_model_path else None,
+    }
+
+
+def main():
+    # Keep CLI behavior working
+    train_and_maybe_save()
 
 
 if __name__ == "__main__":

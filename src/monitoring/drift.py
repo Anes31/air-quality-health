@@ -78,6 +78,7 @@ def maybe_auto_retrain(
 
     try:
         res = auto_retrain_model()
+
         send_alert(
             "RETRAIN RESULT",
             {
@@ -85,6 +86,8 @@ def maybe_auto_retrain(
                 "status": res.get("status"),
                 "message": res.get("message"),
                 "model_path": str(res.get("model_path", "")),
+                "prev_rmse": res.get("prev_rmse"),
+                "new_rmse": res.get("new_rmse") or res.get("rmse"),
             },
         )
     except Exception as e:
@@ -95,3 +98,4 @@ def maybe_auto_retrain(
                 "error": str(e),
             },
         )
+
