@@ -10,80 +10,16 @@ from datetime import datetime, UTC
 from .risk_labels import aqi_to_label
 from .llm_explainer import explain_forecast
 from pathlib import Path
-from src.monitoring_utils import compute_drift_metrics, psi_severity
-from src.auto_retrain import auto_retrain_model, should_retrain
-import requests
 from dotenv import load_dotenv
-import time
-
-
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
-
-LATENCY_THRESHOLD_SECONDS = float(os.getenv("LATENCY_THRESHOLD_SECONDS", "0.5"))
-
-load_dotenv(ENV_PATH)
-
-EXPECTED_FEATURE_COLS = {
-    "co", "no", "no2", "o3", "so2",
-    "pm2_5", "pm10", "nh3", "temp_c", "humidity",
-    "aqi_lag1", "aqi_lag2", "aqi_lag3",
-    "pm2_5_lag1", "pm2_5_lag2", "pm2_5_lag3",
-    "pm10_lag1", "pm10_lag2", "pm10_lag3",
-    "o3_lag1", "o3_lag2", "o3_lag3",
-    "temp_c_lag1", "temp_c_lag2", "temp_c_lag3",
-    "humidity_lag1", "humidity_lag2", "humidity_lag3",
-}
-
-
-DATA_FILE = os.path.join("data", "aq_clean.parquet")
-MODEL_FILE = os.path.join("models", "risk_model.pkl")
+from src.monitoring.alerts import send_alert
+from src.monitoring.latency import timed_call, maybe_alert_slow_call
+from src.monitoring.schema import build_features, compute_schema_status
+from src.monitoring.traffic import compute_traffic_info, maybe_alert_traffic
+from src.monitoring.drift import summarize_data_drift, maybe_alert_data_drift, maybe_auto_retrain
+from src.monitoring.logging import log_predictions
+from src.config import DATA_FILE, MODEL_FILE, LATENCY_THRESHOLD_SECONDS, PREDICTIONS_LOG_FILE, MODEL_PERF_LOG_FILE
 
 logger = logging.getLogger("aq_api")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
-def log_predictions(results, endpoint: str):
-    """Append predictions to a JSONL log file + log a short summary."""
-    os.makedirs("logs", exist_ok=True)
-    log_path = os.path.join("logs", "predictions.jsonl")
-    now = datetime.now(UTC).isoformat()
-
-    with open(log_path, "a", encoding="utf-8") as f:
-        for r in results:
-            record = {
-                "logged_at_utc": now,
-                "endpoint": endpoint,
-                **r,
-            }
-            f.write(json.dumps(record, default=str) + "\n")
-
-    logger.info(f"{endpoint}: logged {len(results)} predictions → {log_path}")
-
-ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL")
-
-def send_alert(title: str, details: dict | None = None):
-    if not ALERT_WEBHOOK_URL:
-        logger.warning(f"Alert requested but ALERT_WEBHOOK_URL not set. Title: {title}, details: {details}")
-        return
-
-    lines = [f"**{title}**"]
-    if details:
-        for k, v in details.items():
-            lines.append(f"- **{k}**: {v}")
-    payload = {"content": "\n".join(lines)}
-
-    try:
-        resp = requests.post(ALERT_WEBHOOK_URL, json=payload, timeout=5)
-        if resp.status_code != 204:
-            logger.error(f"Discord webhook error {resp.status_code}: {resp.text}")
-    except Exception as e:
-        logger.error(f"Failed to send alert: {e}")
-
 
 def load_latest_per_city():
     if not os.path.exists(DATA_FILE):
@@ -96,11 +32,6 @@ def load_latest_per_city():
     df = df.sort_values("timestamp_utc")
     latest = df.groupby("city").tail(1)
     return latest
-
-
-def build_features(df: pd.DataFrame):
-    feature_cols = list(EXPECTED_FEATURE_COLS)
-    return df[feature_cols]
 
 
 @asynccontextmanager
@@ -169,10 +100,11 @@ def forecast_3h_explain():
         X = build_features(df)
 
         # Schema drift check
-        missing = EXPECTED_FEATURE_COLS - set(X.columns)
-        extra = set(X.columns) - EXPECTED_FEATURE_COLS
+        schema_info = compute_schema_status(X)
+        if schema_info["status"] == "mismatch":
+            missing = schema_info["missing"]
+            extra = schema_info["extra"]
 
-        if missing or extra:
             logger.error(f"Schema drift detected. Missing: {missing}, Extra: {extra}")
             send_alert(
                 "PREDICTION ERROR",
@@ -191,23 +123,17 @@ def forecast_3h_explain():
                 },
             )
 
+
         # Measure prediction latency
-        t0 = time.perf_counter()
-        preds = app.state.model.predict(X)
-        latency_s = time.perf_counter() - t0
+        preds, latency_s = timed_call(app.state.model.predict, X)
 
         # alert on slow calls
-        if latency_s > LATENCY_THRESHOLD_SECONDS:
-            send_alert(
-                "HIGH LATENCY",
-                {
-                    "endpoint": "/forecast/3h/explain",
-                    "latency_seconds": round(latency_s, 3),
-                    "n_rows": int(len(X)),
-                },
-            )
-
-        preds = app.state.model.predict(X)
+        maybe_alert_slow_call(
+            endpoint="/forecast/3h/explain",
+            latency_s=latency_s,
+            threshold_s=LATENCY_THRESHOLD_SECONDS,
+            n_rows=len(X),
+        )
 
         results = []
         for (_, row), future_aqi in zip(df.iterrows(), preds):
@@ -277,17 +203,13 @@ def monitor_schema():
     sample = df_raw.tail(10).copy()
     X = build_features(sample)
 
-    current_cols = set(X.columns)
-    missing = EXPECTED_FEATURE_COLS - current_cols
-    extra = current_cols - EXPECTED_FEATURE_COLS
+    schema_info = compute_schema_status(X)
+    status = schema_info["status"]
+    missing = schema_info["missing"]
+    extra = schema_info["extra"]
+    col_types = schema_info["column_types"]
 
-    status = "ok"
-    if missing or extra:
-        status = "mismatch"
-
-    col_types = {col: str(dtype) for col, dtype in X.dtypes.items()}
-
-    if status == "mismatch":  # for schema
+    if status == "mismatch":
         send_alert(f"[SCHEMA DRIFT] Missing: {missing}, Extra: {extra}")
 
     return {
@@ -301,7 +223,8 @@ def monitor_schema():
 
 @app.get("/monitor/data_drift")
 def monitor_drift():
-    log_path = Path("logs") / "predictions.jsonl"
+    log_path = Path(PREDICTIONS_LOG_FILE)
+
     if not log_path.exists():
         raise HTTPException(status_code=404, detail="No prediction logs found yet")
 
@@ -319,76 +242,32 @@ def monitor_drift():
             "detail": "Need at least 100 logged predictions for drift analysis.",
         }
 
-    # Ensure sorted by time
-    df["logged_at_utc"] = pd.to_datetime(df["logged_at_utc"], format="ISO8601", utc=True, errors="coerce")
+        # Ensure sorted by time
+    df["logged_at_utc"] = pd.to_datetime(
+        df["logged_at_utc"],
+        format="ISO8601",
+        utc=True,
+        errors="coerce",
+    )
     df = df.sort_values("logged_at_utc")
-
-    n = len(df)
-    baseline = df.iloc[: int(0.2 * n)]
-    recent = df.iloc[int(0.8 * n):]
 
     features = ["pm2_5", "pm10", "temp_c", "humidity", "predicted_aqi_3h"]
 
-    report = {}
-    severity_map = {"no_drift": 0, "moderate_drift": 1, "significant_drift": 2}
-    overall_level = 0
+    summary = summarize_data_drift(df=df, features=features)
+    overall_status = summary["overall_status"]
+    report = summary["report"]
+    n = summary["n_logs"]
 
-    for col in features:
-        metrics = compute_drift_metrics(baseline, recent, col)
-        sev = psi_severity(metrics["PSI"])
-        metrics["severity"] = sev
-        report[col] = metrics
-        if sev in severity_map:
-            overall_level = max(overall_level, severity_map[sev])
+    maybe_alert_data_drift(overall_status, report, n_logs=n)
 
-    inv_severity_map = {0: "no_drift", 1: "moderate_drift", 2: "significant_drift"}
-    overall_status = inv_severity_map.get(overall_level, "insufficient_data")
-
-    # Send alert if overall drift is moderate or significant
-    if overall_status in ("moderate_drift", "significant_drift"):
-        drifted_features = [
-            f"{name} (PSI={metrics['PSI']:.3f}, sev={metrics['severity']})"
-            for name, metrics in report.items()
-            if metrics["severity"] in ("moderate_drift", "significant_drift")
-        ]
-
-    send_alert(
-        "DATA DRIFT",
-        {
-            "severity": overall_status,
-            "n_logs": n,
-            "drifted_features": ", ".join(drifted_features),
+    maybe_auto_retrain(
+        trigger="data_drift",
+        condition=overall_status in ("moderate_drift", "significant_drift"),
+        extra_details={
+            "overall_status": overall_status,
+            "n_logs": int(n),
         },
     )
-
-    if should_retrain() and overall_status in ("moderate_drift", "significant_drift"):
-        send_alert(
-            "RETRAIN STARTED",
-            {
-                "trigger": "data_drift",
-                "overall_status": overall_status,
-                "n_logs": int(n),
-            },
-        )
-        try:
-            res = auto_retrain_model()
-            send_alert(
-                "RETRAIN RESULT",
-                {
-                    "trigger": "data_drift",
-                    "status": res.get("status"),
-                    "message": res.get("message"),
-                    "model_path": str(res.get("model_path", "")),
-                },
-            )
-        except Exception as e:
-            send_alert(
-                "RETRAIN FAILED",
-                {
-                    "trigger": "data_drift",
-                    "error": str(e),
-                },
-            )
 
     return {
         "status": overall_status,
@@ -397,9 +276,11 @@ def monitor_drift():
     }
 
 
+
 @app.get("/monitor/model_drift")
 def monitor_model():
-    perf_file = os.path.join("logs", "model_performance.jsonl")
+    perf_file = MODEL_PERF_LOG_FILE
+
     if not os.path.exists(perf_file):
         raise HTTPException(status_code=404, detail="No model performance log found")
 
@@ -448,35 +329,15 @@ def monitor_model():
         status = "no_drift"
 
 
-    if should_retrain() and status == "drift_detected":
-        send_alert(
-            "RETRAIN STARTED",
-            {
-                "trigger": "model_drift",
-                "delta_rmse": round(delta, 3),
-                "threshold": threshold,
-                "n_records": int(n),
-            },
-        )
-        try:
-            res = auto_retrain_model()
-            send_alert(
-                "RETRAIN RESULT",
-                {
-                    "trigger": "model_drift",
-                    "status": res.get("status"),
-                    "message": res.get("message"),
-                    "model_path": str(res.get("model_path", "")),
-                },
-            )
-        except Exception as e:
-            send_alert(
-                "RETRAIN FAILED",
-                {
-                    "trigger": "model_drift",
-                    "error": str(e),
-                },
-            )
+    maybe_auto_retrain(
+        trigger="model_drift",
+        condition=status == "drift_detected",
+        extra_details={
+            "delta_rmse": round(delta, 3),
+            "threshold": threshold,
+            "n_records": int(n),
+        },
+    )
 
     return {
         "status": status,
@@ -493,7 +354,8 @@ def monitor_traffic(window_minutes: int = 10):
     Simple traffic monitor: compares last `window_minutes` to the previous window.
     Sends alert on big drop or spike.
     """
-    log_path = Path("logs") / "predictions.jsonl"
+    log_path = Path(PREDICTIONS_LOG_FILE)
+
     if not log_path.exists():
         raise HTTPException(status_code=404, detail="No prediction logs found yet")
 
@@ -504,52 +366,8 @@ def monitor_traffic(window_minutes: int = 10):
             "detail": "No prediction logs to analyze.",
         }
 
-    df["logged_at_utc"] = pd.to_datetime(
-        df["logged_at_utc"], utc=True, errors="coerce"
-    )
+    df["logged_at_utc"] = pd.to_datetime(df["logged_at_utc"], utc=True, errors="coerce")
 
-    now = datetime.now(UTC)
-    window = pd.Timedelta(minutes=window_minutes)
-
-    recent = df[df["logged_at_utc"] >= now - window]
-    previous = df[
-        (df["logged_at_utc"] < now - window) &
-        (df["logged_at_utc"] >= now - 2 * window)
-    ]
-
-    recent_rpm = len(recent) / window_minutes
-    prev_rpm = len(previous) / window_minutes if len(previous) > 0 else None
-
-    status = "ok"
-    info = {
-        "window_minutes": window_minutes,
-        "recent_count": int(len(recent)),
-        "recent_rpm": recent_rpm,
-        "previous_count": int(len(previous)),
-        "previous_rpm": prev_rpm,
-    }
-
-    # only compare if we have a previous window
-    if prev_rpm and prev_rpm > 0:
-        ratio = recent_rpm / prev_rpm
-        if ratio <= 0.2:
-            status = "volume_drop"
-            send_alert(
-                "TRAFFIC DROP",
-                {
-                    **info,
-                    "ratio": round(ratio, 3),
-                },
-            )
-        elif ratio >= 5.0:
-            status = "volume_spike"
-            send_alert(
-                "TRAFFIC SPIKE",
-                {
-                    **info,
-                    "ratio": round(ratio, 3),
-                },
-            )
-
-    info["status"] = status
+    info = compute_traffic_info(df, window_minutes=window_minutes)
+    maybe_alert_traffic(info)
     return info
