@@ -215,11 +215,9 @@ The monitoring suite uses the following rules:
 
 ```
 OWM_API_KEY=...
-LATENCY_THRESHOLD_SECONDS=2.0
-MODEL_FILE=models/risk_model.pkl
-DATA_FILE=data/aq_clean.parquet
-PREDICTIONS_LOG_FILE=logs/predictions.jsonl
-MODEL_PERF_LOG_FILE=logs/model_performance.jsonl
+OLLAMA_BASE_URL=...
+OLLAMA_MODEL=...
+ALERT_WEBHOOK_URL=...
 ```
 
 `.env` **must not be committed**.
