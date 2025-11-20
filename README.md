@@ -122,6 +122,7 @@ Everything is preconfigured: API service, MLflow, volumes.
 
 ### Start all services
 ```bash
+git pull origin main
 docker-compose up -d --build
 ```
 
