@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import joblib
 
-from risk_labels import aqi_to_label
+from src.risk_labels import aqi_to_label
 
 DATA_FILE = os.path.join("data", "aq_clean.parquet")
 MODEL_FILE = os.path.join("models", "risk_model.pkl")

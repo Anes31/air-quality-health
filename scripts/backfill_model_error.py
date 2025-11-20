@@ -1,6 +1,5 @@
 import os
 import json
-from datetime import timedelta
 import pandas as pd
 
 PRED_LOG = os.path.join("logs", "predictions.jsonl")

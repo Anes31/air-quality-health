@@ -10,7 +10,6 @@ from datetime import datetime, UTC
 from .risk_labels import aqi_to_label
 from .llm_explainer import explain_forecast
 from pathlib import Path
-from dotenv import load_dotenv
 from src.monitoring.alerts import send_alert
 from src.monitoring.latency import timed_call, maybe_alert_slow_call
 from src.monitoring.schema import build_features, compute_schema_status

@@ -1,4 +1,4 @@
-from parse_air_quality import main as parse_main
+from src.parse_air_quality import main as parse_main
 
 
 def main():

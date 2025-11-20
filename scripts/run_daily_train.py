@@ -1,4 +1,4 @@
-from train_risk_model import main as train_main
+from src.train_risk_model import main as train_main
 
 
 def main():

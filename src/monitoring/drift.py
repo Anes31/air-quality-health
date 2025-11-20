@@ -1,9 +1,6 @@
 from typing import Dict, List
-
-import numpy as np
 import pandas as pd
-
-from src.monitoring_utils import compute_drift_metrics, psi_severity
+from src.monitoring.utils import compute_drift_metrics, psi_severity
 from src.monitoring.alerts import send_alert
 from src.auto_retrain import auto_retrain_model, should_retrain
 
