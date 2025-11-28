@@ -11,14 +11,15 @@ logs/
 *.log
 
 # Data
-data/
+data/*
+!data/.keep
 *.jsonl
 *.parquet
 
 # Models
-models/
+models/*
+!models/.keep
 *.pkl
-# Only ignore model metadata, not all json files
 models/*.json
 
 # MLflow
