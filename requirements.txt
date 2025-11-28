@@ -8,4 +8,4 @@ fastapi
 uvicorn
 mlflow
 lightgbm
-openai
+pytest
