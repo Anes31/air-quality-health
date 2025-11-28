@@ -1,218 +1,190 @@
 # Air Quality Health Risk Pipeline (Updated)
 
-This project is a **full end-to-end MLOps system** that continuously ingests live air‑quality data, cleans it, retrains forecasting models, serves predictions through an API, monitors operational & ML drift, and automatically triggers alerts and retraining — all running inside **Docker** with **cron‑driven automation**.
+This project is a **full end-to-end MLOps system** that ingests live air-quality data, retrains forecasting models, serves predictions through a FastAPI service, tracks drift, logs metrics, runs MLflow, and auto-deploys through **GitHub Actions (CI/CD)** to a **DigitalOcean VM**.
+
+Everything runs inside **Docker**, with **cron-based automation** and **GitHub CI/CD** for builds, tests, validation, and deployment.
 
 ---
 
-## 🚀 System Overview
+# 🚀 System Overview
 
-The pipeline performs the following:
-
-- **Ingest live air‑quality + weather data** from OpenWeatherMap every 5 minutes
-- Store raw unmodified responses in an **append‑only JSONL log**
-- Convert raw logs into a **clean Parquet dataset** for training & inference
-- Train a **3‑hour AQI forecasting model** (LightGBM)
-- Serve predictions and explanations via a **FastAPI microservice**
-- Generate **LLM explanations** using Ollama (local model)
-- Log predictions for **latency tracking, drift detection, and traffic analysis**
-- Detect **schema drift**, **data drift**, **model drift**, and **traffic anomalies**
-- Perform **auto‑retraining** when drift thresholds are exceeded
-- Send **alerts** for failures, drift events, or API performance issues
-- Run inside **Docker** and fully orchestrated with **cron jobs**
+* Live ingestion every 5 minutes
+* ETL → Parquet
+* LightGBM forecasting model
+* FastAPI prediction + explanation
+* MLflow tracking server
+* Drift detection + alerts
+* Cron-based retraining
+* Dockerized end-to-end
+* CI/CD auto-build + auto-deploy
 
 ---
 
-## 🧱 Tech Stack
+# 🧱 Tech Stack
 
-- **Python**, Pandas, NumPy
-- **FastAPI** + Uvicorn
-- **LightGBM / scikit-learn**
-- **MLflow**
-- **Docker / Docker Compose**
-- **Cron** for automation
-- **OpenWeatherMap** (Air Pollution + Weather)
-- **Ollama** for LLM explanations
-- **Ubuntu (DigitalOcean / local VM)**
+* Python / FastAPI
+* LightGBM
+* MLflow
+* Docker / Docker Compose
+* GitHub Actions (CI + CD)
+* DigitalOcean VM
+* Cron automation
 
 ---
 
-## 📁 Project Structure
+# 📁 Project Structure (short)
 
 ```
-├── data/
-│   ├── aq_raw.jsonl            # append-only raw logs
-│   └── aq_clean.parquet        # cleaned feature dataset
-│
-├── logs/
-│   ├── predictions.jsonl       # API prediction + latency logs
-│   └── model_performance.jsonl # backfilled error logs (model drift)
-│
-├── models/
-│   └── risk_model.pkl          # trained LightGBM model
-│
-├── scripts/
-│   ├── backfill_model_error.py # hourly backfill for model drift
-│   ├── run_daily_train.py      # cron: daily retraining
-│   ├── run_hourly_etl.py       # cron: ETL wrapper
-│   └── quick_forecast.py       # dev-only
-│
-├── src/
-│   ├── api.py                  # FastAPI application
-│   ├── ingest_air_quality.py   # live ingestion (raw → JSONL)
-│   ├── parse_air_quality.py    # ETL to Parquet
-│   ├── train_risk_model.py     # model training
-│   ├── llm_explainer.py        # Ollama explanation generation
-│   ├── risk_labels.py          # AQI → health risk category
-│   │
-│   └── monitoring/             # full monitoring suite
-│       ├── alerts.py
-│       ├── drift.py
-│       ├── latency.py
-│       ├── logging.py
-│       ├── schema.py
-│       ├── traffic.py
-│       └── utils.py
-│
-├── docker-compose.yml          # API + MLflow services
-├── Dockerfile
-├── requirements.txt
-└── README.md
+data/          # raw + clean data
+logs/          # API + model logs
+models/        # model.pkl
+scripts/       # retrain, ETL, drift jobs
+src/           # API + training + monitoring
+docker-compose.yml
+Dockerfile
+.github/workflows/ci.yml
+.github/workflows/deploy.yml
 ```
 
 ---
 
-## 🖥️ Running Locally (Development)
+# ⚙️ CI/CD PIPELINE (IMPORTANT)
 
-### 1. Ingest live data
-```bash
-python src/ingest_air_quality.py
+## CI (Continuous Integration)
+
+Triggered on **every push to main**.
+
+Performs:
+
+1. Install dependencies
+2. Run unit tests (`pytest`)
+3. Run model validation (`validate_model.py`)
+4. Build Docker image
+5. Push image to Docker Hub
+6. Tag as `latest`
+
+If any step fails, build stops.
+
+---
+
+## CD (Continuous Deployment)
+
+Triggered **manually** from GitHub Actions (workflow_dispatch).
+
+Performs on the VM:
+
+```
+cd /root/air-quality-health
+git reset --hard origin/main
+docker-compose down
+docker system prune -f
+docker-compose pull
+docker-compose up -d
 ```
 
-### 2. ETL (raw → clean)
-```bash
-python src/parse_air_quality.py
+This guarantees:
+
+* VM always matches GitHub repo
+* Old containers removed
+* New image pulled
+* New healthchecks applied cleanly
+* System restarts with zero stale config
+
+---
+
+# ❤️ Healthchecks (Docker)
+
+### API container
+
+```
+test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
 ```
 
-### 3. Train the forecasting model
-```bash
-python src/train_risk_model.py
+### MLflow container
+
+```
+test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
 ```
 
-### 4. Start the API
-```bash
+**Important:**
+Your Dockerfile MUST include `curl`:
+
+```dockerfile
+RUN apt-get update && apt-get install -y curl
+```
+
+Without this, both containers will stay **unhealthy**.
+
+---
+
+# 🖥️ Running Locally
+
+### Start API
+
+```
 uvicorn src.api:app --reload
 ```
-Docs: http://localhost:8000/docs
 
-### 5. Start MLflow locally (no Docker)
-```bash
+### Start MLflow
+
+```
 mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
 ```
 
-### ⚠️ Local vs Server: LLM Behavior
-- **Locally:** Ollama runs normally and provides natural-language explanations.
-- **On the server:** If Ollama is not installed (or RAM is limited), the API automatically falls back to a lightweight string‑only explanation function (no LLM cost, no RAM overhead).
-
 ---
 
-## ☁️ Running on the Server (DigitalOcean VM)
+# ☁️ Running on the Server (VM)
 
-On the VM, **you only use `docker-compose`** — no building images manually.
-Everything is preconfigured: API service, MLflow, volumes.
+### Start services
 
-### Start all services
-```bash
-git pull origin main
-docker-compose up -d --build
+```
+docker-compose up -d
 ```
 
-### MLflow UI on the server
-Accessible at:
+### View logs
+
 ```
-http://YOUR_SERVER_IP:5000
-```
-
-`docker-compose.yml` manages:
-- API service
-- MLflow tracking server
-- Shared volumes for MLruns, logs, data, models
-
----
-
-## ⏱ Cron Automation (Production)
-
-Open crontab:
-```bash
-crontab -e
+docker-compose logs -f
 ```
 
-### Ingestion + ETL (every 5 minutes)
-```bash
-*/5 * * * * docker exec air-quality-api python src/ingest_air_quality.py
-*/5 * * * * docker exec air-quality-api python src/parse_air_quality.py
-```
+### Check health
 
-### Daily retraining (3 AM)
-```bash
-0 3 * * * docker exec air-quality-api python src/train_risk_model.py
 ```
-
-### Model drift backfill (hourly)
-```bash
-5 * * * * docker exec air-quality-api python scripts/backfill_model_error.py
-```
-
-### Simulated API traffic
-```bash
-*/30 * * * * curl -s http://localhost:8000/forecast/3h/explain > /dev/null
-```
-
-### Monitoring suite
-```bash
-10 * * * * curl -s http://localhost:8000/monitor/schema > /dev/null
-11 * * * * curl -s http://localhost:8000/monitor/data_drift > /dev/null
-12 * * * * curl -s http://localhost:8000/monitor/model > /dev/null
-*  * * * * curl -sf http://localhost:8000/health || curl -H "Content-Type: application/json" -d '{"alert": "API down"}' YOUR_ALERT_ENDPOINT
+docker ps
 ```
 
 ---
 
-## 🔍 Monitoring Endpoints
+# ⏱ Automation (Cron on VM)
 
-### `/monitor/schema`
-- Detects schema mismatches between live data and model features
+* ETL + ingest every 5 min
+* Drift backfill hourly
+* Retrain daily
+* Monitoring checks
+* API uptime check
 
-### `/monitor/data_drift`
-- Tracks distribution shift using recent prediction logs
-- Includes auto-drift alerts and optional auto-retraining
+All run via:
 
-### `/monitor/model`
-- Checks degradation over time via RMSE comparison
-
-### `/monitor/traffic`
-- Detects spikes/drops in API usage
-
-### `/forecast/3h/explain`
-- Returns prediction
-- Health label
-- Latency
-- LLM explanation of AQI risks
+```
+docker exec air-quality-api python ...
+```
 
 ---
 
-## 🔔 Alerts & Auto-Retraining
-The monitoring suite uses the following rules:
+# 🔍 Monitoring Endpoints
 
-- **Schema Drift:** missing/extra columns → alert + fail prediction
-- **Data Drift:** moderate/significant drift → alert + optional auto‑retrain
-- **Model Drift:** RMSE shift ≥ 0.25 → alert + auto‑retrain
-- **Latency:** slow prediction → alert
-- **Traffic:** large spike/drop → alert
-- **API down:** health check fallback curl fires alert
+* `/health`
+* `/ready`
+* `/monitor/schema`
+* `/monitor/data_drift`
+* `/monitor/model`
+* `/monitor/traffic`
 
 ---
 
-## 🔒 Environment Variables (`.env`)
+# 🔒 Environment Variables
+
+`.env` contains:
 
 ```
 OWM_API_KEY=...
@@ -221,26 +193,29 @@ OLLAMA_MODEL=...
 ALERT_WEBHOOK_URL=...
 ```
 
-`.env` **must not be committed**.
+Do NOT commit `.env`.
 
 ---
 
-## 📝 Useful Commands
-```bash
-git pull origin main
-docker-compose up -d --build
-docker-compose logs -f
-docker logs --tail 50 air-quality-api
+# 📝 Useful Commands
+
+```
+docker-compose up -d
 docker-compose down
+docker-compose pull
 docker-compose restart api
+docker-compose logs -f
+git reset --hard origin/main
 ```
 
 ---
 
-## 📌 Notes
-- Everything is designed to run continuously with minimal supervision
-- Auto‑drift detection + retraining makes this a production‑style MLOps system
-- Local LLM explanations avoid external API cost
-- Docker + cron create a stable, repeatable runtime
+# 📌 Notes
+
+* CI/CD now handles image builds, pushes, and clean redeploys
+* Healthchecks require `curl` inside the image
+* Deploy workflow uses `reset --hard` to guarantee correct state
+* Docker Compose health reflects container-internal checks
+* Containers run cleanly after automatic rebuilds
 
 ---
