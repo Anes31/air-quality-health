@@ -4,7 +4,7 @@ services:
   api:
     container_name: air-quality-api
     build: .
-    image: air-quality-api
+    image: anesmadani/air-quality-api:latest
     restart: always
     env_file:
       - .env
@@ -16,7 +16,6 @@ services:
       - /root/air-quality-health/logs:/app/logs
       - aq-mlflow:/app/mlruns
     healthcheck:
-      # adjust URL if you later add a dedicated /health endpoint
       test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
       interval: 30s
       timeout: 5s
@@ -25,7 +24,7 @@ services:
 
   mlflow-ui:
     container_name: mlflow-ui
-    image: air-quality-api
+    image: anesmadani/air-quality-api:latest
     restart: always
     depends_on:
       - api
