@@ -23,6 +23,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Add project root to PYTHONPATH
+        run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
+
       - name: Validate model
         run: python scripts/validate_model.py
 
