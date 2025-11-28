@@ -9,3 +9,4 @@ uvicorn
 mlflow
 lightgbm
 pytest
+httpx
