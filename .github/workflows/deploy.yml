@@ -18,6 +18,6 @@ jobs:
             cd /root/air-quality-health
             git reset --hard origin/main
             docker-compose down
-            docker-compose pull
             docker system prune -f
+            docker-compose pull
             docker-compose up -d
