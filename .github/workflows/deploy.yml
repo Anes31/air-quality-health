@@ -16,6 +16,8 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
             cd /root/air-quality-health
-            git pull origin main
+            git reset --hard origin/main
+            docker-compose down
             docker-compose pull
+            docker system prune -f
             docker-compose up -d
