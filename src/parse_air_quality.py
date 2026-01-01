@@ -57,11 +57,9 @@ def main():
     for lag in lags:
         for col in ["aqi", "pm2_5", "pm10", "o3", "temp_c", "humidity"]:
             df[f"{col}_lag{lag}"] = df.groupby("city")[col].shift(lag)
-    df = df.dropna()
+    df = df.dropna(subset=[c for c in df.columns if c != "aqi_future_3h"])
     df.to_parquet(OUT_FILE, index=False)
-    print(df['aqi_future_3h'])
     print(f"Saved clean data to {OUT_FILE}")
-    # print(df.head())
     print(df.shape)
 
 
