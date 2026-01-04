@@ -34,13 +34,16 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
-
             docker-compose down || true
             docker system prune -af
+
+            docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
+
             docker-compose pull
             docker-compose up -d
 
             cd /root/air-quality-health/airflow
+            docker compose down || true
+            docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
             docker compose pull
             docker compose up -d
