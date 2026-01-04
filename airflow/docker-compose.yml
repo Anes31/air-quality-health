@@ -20,7 +20,7 @@ services:
       - postgres
       - airflow-scheduler
     env_file:
-      - /root/air-quality-health/airflow/.env
+      - /root/air-quality-health/.env
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -48,7 +48,7 @@ services:
     depends_on:
       - postgres
     env_file:
-      - /root/air-quality-health/airflow/.env
+      - /root/air-quality-health/.env
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
