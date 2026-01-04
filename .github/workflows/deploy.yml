@@ -12,9 +12,9 @@ jobs:
 
       - name: Build Docker images
         run: |
-          docker build -t anesmadani/air-quality-api:${{ github.sha }} ./ 
+          docker build -t anesmadani/air-quality-api:${{ github.sha }} ./
           docker push anesmadani/air-quality-api:${{ github.sha }}
-          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} ./ 
+          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} ./airflow
           docker push anesmadani/air-quality-airflow:${{ github.sha }}
 
       - name: SSH Deploy
@@ -24,7 +24,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /root/air-quality-health
+            cd ~/air-quality-health
             git reset --hard origin/main
             docker-compose down
             docker system prune -f
