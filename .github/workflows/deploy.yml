@@ -28,11 +28,19 @@ jobs:
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
+            set -e
+
             cd /root/air-quality-health
             git fetch origin main
             git reset --hard origin/main
-            docker-compose down
+
+            docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
+
+            docker-compose down || true
             docker system prune -af
             docker-compose pull
-            docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
             docker-compose up -d
+
+            cd /root/air-quality-health/airflow
+            docker compose pull
+            docker compose up -d
