@@ -2,8 +2,8 @@ import json
 import os
 import pandas as pd
 
-RAW_FILE = os.path.join("data", "aq_raw.jsonl")
-OUT_FILE = os.path.join("data", "aq_clean.parquet")
+RAW_FILE = "/opt/airflow/data/aq_raw.jsonl"
+OUT_FILE = "/opt/airflow/data/aq_clean.parquet"
 
 
 def parse_record(rec):
@@ -32,8 +32,7 @@ def main():
     records = []
 
     if not os.path.exists(RAW_FILE):
-        print(f"No raw file found at {RAW_FILE}")
-        return
+        raise FileNotFoundError(RAW_FILE)
 
     with open(RAW_FILE, "r", encoding="utf-8") as f:
         for line in f:
@@ -58,6 +57,7 @@ def main():
         for col in ["aqi", "pm2_5", "pm10", "o3", "temp_c", "humidity"]:
             df[f"{col}_lag{lag}"] = df.groupby("city")[col].shift(lag)
     df = df.dropna(subset=[c for c in df.columns if c != "aqi_future_3h"])
+    os.makedirs(os.path.dirname(OUT_FILE), exist_ok=True)
     df.to_parquet(OUT_FILE, index=False)
     print(f"Saved clean data to {OUT_FILE}")
     print(df.shape)

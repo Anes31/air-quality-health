@@ -1,4 +1,3 @@
-import os
 import json
 import pandas as pd
 from lightgbm import LGBMRegressor
@@ -8,12 +7,10 @@ import joblib
 import mlflow
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # /app
 
-DATA_FILE  = BASE_DIR / "data"   / "aq_clean.parquet"
-MODEL_FILE = BASE_DIR / "models" / "risk_model.pkl"
-META_FILE  = BASE_DIR / "models" / "risk_model_meta.json"
-
+DATA_FILE  = Path("/opt/airflow/data/aq_clean.parquet")
+MODEL_FILE = Path("/opt/airflow/models/risk_model.pkl")
+META_FILE  = Path("/opt/airflow/models/metrics_baseline.json")
 
 def load_data():
     if not DATA_FILE.exists():
@@ -60,6 +57,10 @@ def save_meta(rmse: float, n_rows: int):
 
 
 def train_and_maybe_save():
+
+    mlflow.set_tracking_uri("file:/app/mlruns")
+    mlflow.set_experiment("airflow_docker")
+
     df = load_data()
     n_rows = len(df)
     print(f"Loaded {n_rows} rows for training.")
@@ -71,7 +72,7 @@ def train_and_maybe_save():
     X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
     y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
 
-    mlflow.set_experiment("air_quality_risk_model")
+    
 
     with mlflow.start_run():
         mlflow.log_param("model_type", "LGBMRegressor")

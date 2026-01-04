@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [airq_net]
+
+  airflow-webserver:
+    build: .
+    command: webserver
+    depends_on:
+      - postgres
+      - airflow-scheduler
+    env_file:
+      - ../.env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+      AIRFLOW__WEBSERVER__SECRET_KEY: "something_stupid_and_long"
+      PYTHONPATH: /opt/airflow
+      AIR_QUALITY_API_BASE_URL: http://api:8000
+      MLFLOW_TRACKING_URI: "file:/app/mlruns"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../models:/opt/airflow/models
+      - ../mlruns:/app/mlruns
+    ports:
+      - "8080:8080"
+    networks: [airq_net]
+
+  airflow-scheduler:
+    build: .
+    command: scheduler
+    depends_on:
+      - postgres
+    env_file:
+      - ../.env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: "something_stupid_and_long"
+      PYTHONPATH: /opt/airflow
+      AIR_QUALITY_API_BASE_URL: http://api:8000
+      MLFLOW_TRACKING_URI: "file:/app/mlruns"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../models:/opt/airflow/models
+      - ../mlruns:/app/mlruns
+    networks: [airq_net]
+
+volumes:
+  postgres_data:
+  aq-mlflow:
+networks:
+  airq_net:
+    external: true

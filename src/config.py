@@ -23,19 +23,16 @@ CITIES = {
 }
 
 # -------------------------
-# API data/model paths
+# Paths (LOCAL DEFAULT, OVERRIDABLE IN DOCKER/AIRFLOW)
 # -------------------------
-DATA_FILE = os.path.join("data", "aq_clean.parquet")
-MODEL_FILE = os.path.join("models", "risk_model.pkl")
+DATA_DIR = os.getenv("DATA_DIR", str(BASE_DIR / "data"))
+MODELS_DIR = os.getenv("MODELS_DIR", str(BASE_DIR / "models"))
+LOGS_DIR = os.getenv("LOGS_DIR", str(BASE_DIR / "data" / "logs"))
 
-# -------------------------
-# Monitoring config
-# -------------------------
-LOG_DIR = os.path.join("logs")
-PREDICTIONS_LOG_FILE = os.path.join(LOG_DIR, "predictions.jsonl")
-MODEL_PERF_LOG_FILE = os.path.join(LOG_DIR, "model_performance.jsonl")
+DATA_FILE = os.path.join(DATA_DIR, "aq_clean.parquet")
+MODEL_FILE = os.path.join(MODELS_DIR, "risk_model.pkl")
 
-# latency alert threshold
-LATENCY_THRESHOLD_SECONDS = float(
-    os.getenv("LATENCY_THRESHOLD_SECONDS", "0.5")
-)
+PREDICTIONS_LOG_FILE = os.path.join(LOGS_DIR, "predictions.jsonl")
+MODEL_PERF_LOG_FILE = os.path.join(LOGS_DIR, "model_performance.jsonl")
+
+LATENCY_THRESHOLD_SECONDS = float(os.getenv("LATENCY_THRESHOLD_SECONDS", "0.5"))
