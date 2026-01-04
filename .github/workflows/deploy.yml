@@ -14,14 +14,18 @@ jobs:
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Build + Push images
+      - name: Build + Push images (sha + latest)
         run: |
-          docker build -t anesmadani/air-quality-api:${{ github.sha }} ./
+          set -e
+          docker build -t anesmadani/air-quality-api:${{ github.sha }} -t anesmadani/air-quality-api:latest ./
           docker push anesmadani/air-quality-api:${{ github.sha }}
-          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} ./airflow
-          docker push anesmadani/air-quality-airflow:${{ github.sha }}
+          docker push anesmadani/air-quality-api:latest
 
-      - name: SSH Deploy
+          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} -t anesmadani/air-quality-airflow:latest ./airflow
+          docker push anesmadani/air-quality-airflow:${{ github.sha }}
+          docker push anesmadani/air-quality-airflow:latest
+
+      - name: SSH Deploy (API stack + Airflow stack)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DO_HOST }}
@@ -35,17 +39,16 @@ jobs:
             git reset --hard origin/main
 
             docker-compose down || true
+            cd /root/air-quality-health/airflow && docker-compose down || true
+
             docker system prune -af
 
             docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
 
+            cd /root/air-quality-health
             docker-compose pull
             docker-compose up -d
 
             cd /root/air-quality-health/airflow
-            docker-compose down || true
-
-            docker network inspect airq_net >/dev/null 2>&1 || docker network create airq_net
-
             docker-compose pull
             docker-compose up -d
