@@ -1,143 +1,133 @@
-# Air Quality Health Risk Pipeline (Updated)
+# Air Quality Health Risk Pipeline
 
-This project is a **full end-to-end MLOps system** that ingests live air-quality data, retrains forecasting models, serves predictions through a FastAPI service, tracks drift, logs metrics, runs MLflow, and auto-deploys through **GitHub Actions (CI/CD)** to a **DigitalOcean VM**.
+This project is an **end-to-end MLOps system** that ingests live air-quality data, trains and evaluates forecasting models, serves predictions via an API, tracks drift and performance, and runs fully automated scheduling and monitoring with **Airflow**.
 
-Everything runs inside **Docker**, with **cron-based automation** and **GitHub CI/CD** for builds, tests, validation, and deployment.
-
----
-
-# 🚀 System Overview
-
-* Live ingestion every 5 minutes
-* ETL → Parquet
-* LightGBM forecasting model
-* FastAPI prediction + explanation
-* MLflow tracking server
-* Drift detection + alerts
-* Cron-based retraining
-* Dockerized end-to-end
-* CI/CD auto-build + auto-deploy
+Everything runs in **Docker**, with CI/CD handling build and deployment.
 
 ---
 
-# 🧱 Tech Stack
+## 🚀 What the System Does
+
+* Ingests live air-quality data every 5 minutes
+* Runs ETL and stores clean data as Parquet
+* Trains a LightGBM forecasting model
+* Serves predictions and explanations via FastAPI
+* Logs predictions and model performance
+* Tracks data drift and model drift
+* Triggers alerts and optional retraining
+* Tracks experiments with MLflow
+* Orchestrates everything with Airflow
+
+---
+
+## 🧱 Tech Stack
 
 * Python / FastAPI
 * LightGBM
 * MLflow
+* Airflow
 * Docker / Docker Compose
-* GitHub Actions (CI + CD)
+* GitHub Actions (CI/CD)
 * DigitalOcean VM
-* Cron automation
 
 ---
 
-# 📁 Project Structure (short)
+## 📁 Project Structure
 
 ```
-data/          # raw + clean data
-logs/          # API + model logs
-models/        # model.pkl
-scripts/       # retrain, ETL, drift jobs
-src/           # API + training + monitoring
-docker-compose.yml
+data/           # raw + clean data (host-mounted)
+logs/           # API logs (host-mounted)
+models/         # trained models + metrics (host-mounted)
+src/            # shared code used by API + Airflow DAGs
+
+airflow/
+  ├─ dags/      # Airflow DAGs
+  ├─ logs/      # Airflow logs (host-mounted)
+  ├─ plugins/   # Airflow plugins (optional)
+  └─ docker-compose.yml
+
+docker-compose.yml   # API + MLflow stack
 Dockerfile
-.github/workflows/ci.yml
-.github/workflows/deploy.yml
+.github/workflows/
 ```
 
 ---
 
-# ⚙️ CI/CD PIPELINE (IMPORTANT)
+## ⏱ Automation (Airflow)
 
-## CI (Continuous Integration)
+All automation is handled by **Airflow**.
 
-Triggered on **every push to main**.
+### Core DAGs
 
-Performs:
+* `etl_pipeline` — ingest + parse (every 5 minutes)
+* `train_model` — daily retraining (03:00)
+* `backfill_model_error` — hourly performance backfill
+* `monitor_schema`
+* `monitor_data_drift`
+* `monitor_model`
+* `forecast_3h_explain`
+* `api_healthcheck`
 
-1. Install dependencies
-2. Run unit tests (`pytest`)
-3. Run model validation (`validate_model.py`)
-4. Build Docker image
-5. Push image to Docker Hub
-6. Tag as `latest`
-
-If any step fails, build stops.
-
----
-
-## CD (Continuous Deployment)
-
-Triggered **manually** from GitHub Actions (workflow_dispatch).
-
-Performs on the VM:
-
-```
-cd /root/air-quality-health
-git reset --hard origin/main
-docker-compose down
-docker system prune -f
-docker-compose pull
-docker-compose up -d
-```
-
-This guarantees:
-
-* VM always matches GitHub repo
-* Old containers removed
-* New image pulled
-* New healthchecks applied cleanly
-* System restarts with zero stale config
+No cron jobs. No `docker exec`. No curl-based scheduling.
 
 ---
 
-# ❤️ Healthchecks (Docker)
+## 🌐 API
 
-### API container
+### Endpoints
 
-```
-test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-```
+* `GET /health` — liveness / readiness
+* `GET /forecast/3h/explain` — predictions + explanations
 
-### MLflow container
-
-```
-test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
-```
-
-**Important:**
-Your Dockerfile MUST include `curl`:
-
-```dockerfile
-RUN apt-get update && apt-get install -y curl
-```
-
-Without this, both containers will stay **unhealthy**.
+Monitoring endpoints are **not exposed**; monitoring runs inside Airflow.
 
 ---
 
-# 🖥️ Running Locally
+## 🔍 Monitoring & Alerts
 
-### Start API
+* Schema drift
+* Data drift
+* Model performance drift
+* Latency checks
+* API health checks
+
+Alerts are sent via `ALERT_WEBHOOK_URL`.
+
+Health alerts trigger **only on failure**, not on success.
+
+---
+
+## 🖥️ Running Locally
+
+### Start API (dev only)
 
 ```
 uvicorn src.api:app --reload
 ```
 
-### Start MLflow
+### Start Airflow
+
+Windows: use a local compose override file with Windows paths (example: `docker-compose.local.yml`).
+Linux: run the Airflow compose file directly.
 
 ```
-mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
+cd airflow
+docker-compose up -d
 ```
 
 ---
 
-# ☁️ Running on the Server (VM)
+## ☁️ Running on the Server
 
 ### Start services
 
 ```
+# API + MLflow stack
+cd /root/air-quality-health
+docker-compose up -d
+
+# Airflow stack
+cd /root/air-quality-health/airflow
 docker-compose up -d
 ```
 
@@ -147,7 +137,7 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
-### Check health
+### Check container health
 
 ```
 docker ps
@@ -155,67 +145,32 @@ docker ps
 
 ---
 
-# ⏱ Automation (Cron on VM)
+## 🔒 Environment Variables
 
-* ETL + ingest every 5 min
-* Drift backfill hourly
-* Retrain daily
-* Monitoring checks
-* API uptime check
-
-All run via:
+### API
 
 ```
-docker exec air-quality-api python ...
-```
-
----
-
-# 🔍 Monitoring Endpoints
-
-* `/health`
-* `/ready`
-* `/monitor/schema`
-* `/monitor/data_drift`
-* `/monitor/model`
-* `/monitor/traffic`
-
----
-
-# 🔒 Environment Variables
-
-`.env` contains:
-
-```
-OWM_API_KEY=...
-OLLAMA_BASE_URL=...
-OLLAMA_MODEL=...
+MODEL_FILE=/app/models/risk_model.pkl
+DATA_FILE=/app/data/aq_clean.parquet
 ALERT_WEBHOOK_URL=...
 ```
 
-Do NOT commit `.env`.
-
----
-
-# 📝 Useful Commands
+### Airflow
 
 ```
-docker-compose up -d
-docker-compose down
-docker-compose pull
-docker-compose restart api
-docker-compose logs -f
-git reset --hard origin/main
+AIR_QUALITY_API_BASE_URL=http://api:8000
 ```
 
----
-
-# 📌 Notes
-
-* CI/CD now handles image builds, pushes, and clean redeploys
-* Healthchecks require `curl` inside the image
-* Deploy workflow uses `reset --hard` to guarantee correct state
-* Docker Compose health reflects container-internal checks
-* Containers run cleanly after automatic rebuilds
+`.env` is used by Docker Compose to set container environment (API + Airflow).
 
 ---
+
+## 📌 Notes
+
+* Airflow is the **only scheduler**
+* First-time Airflow setup requires initializing the metadata DB (`airflow db migrate` / `airflow db init`)
+* Airflow imports project code from `/opt/airflow/src` (mounted from repo `src/`)
+* All paths inside containers are absolute and fixed
+* Monitoring logic lives in `src/monitoring/`
+* CI/CD builds and deploys clean images
+* Local and production differ only by configuration, not code
