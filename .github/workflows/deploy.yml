@@ -6,14 +6,23 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: SSH into VM and deploy
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build Docker images
+        run: |
+          docker build -t anesmadani/air-quality-api:${{ github.sha }} ./api
+          docker push anesmadani/air-quality-api:${{ github.sha }}
+          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} ./airflow
+          docker push anesmadani/air-quality-airflow:${{ github.sha }}
+
+      - name: SSH Deploy
+        uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /root/air-quality-health
             git reset --hard origin/main
