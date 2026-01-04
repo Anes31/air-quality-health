@@ -6,14 +6,15 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
       - name: Log in to Docker Hub
-        run: echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Build Docker images
+      - name: Build + Push images
         run: |
           docker build -t anesmadani/air-quality-api:${{ github.sha }} ./
           docker push anesmadani/air-quality-api:${{ github.sha }}
@@ -26,11 +27,11 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
-          port: 22
           script: |
             cd /root/air-quality-health
+            git fetch origin main
             git reset --hard origin/main
             docker-compose down
-            docker system prune -f
+            docker system prune -af
             docker-compose pull
             docker-compose up -d
