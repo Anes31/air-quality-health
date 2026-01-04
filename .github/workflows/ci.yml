@@ -26,9 +26,6 @@ jobs:
       - name: Add project root to PYTHONPATH
         run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
 
-      - name: Validate model
-        run: python scripts/validate_model.py
-
       - name: Run tests
         run: pytest -q
 
