@@ -12,9 +12,9 @@ jobs:
 
       - name: Build Docker images
         run: |
-          docker build -t anesmadani/air-quality-api:${{ github.sha }} ./api
+          docker build -t anesmadani/air-quality-api:${{ github.sha }} ./ 
           docker push anesmadani/air-quality-api:${{ github.sha }}
-          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} ./airflow
+          docker build -t anesmadani/air-quality-airflow:${{ github.sha }} ./ 
           docker push anesmadani/air-quality-airflow:${{ github.sha }}
 
       - name: SSH Deploy
