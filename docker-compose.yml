@@ -18,8 +18,6 @@ services:
       - /root/air-quality-health/models:/app/models
       - /root/air-quality-health/logs:/app/logs
       - aq-mlflow:/app/mlruns
-      - C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/models:/app/models
-      - C:/Users/Anes/OneDrive/Documents/GitHub/air-quality-health/data:/app/data
     networks:
       airq_net:
         aliases:
@@ -37,7 +35,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./mlruns:/app/mlruns
+      - aq-mlflow:/app/mlruns
     networks: [airq_net]
 
 volumes:
